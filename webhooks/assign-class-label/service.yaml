@@ -3,10 +3,8 @@ kind: Service
 metadata:
   name: assign-class-label-webhook
 spec:
-  selector:                  
-    app: assign-class-label-webhook
   ports:
     - name: https
       protocol: TCP
       port: 443
-      targetPort: 8443
+      targetPort: 5000

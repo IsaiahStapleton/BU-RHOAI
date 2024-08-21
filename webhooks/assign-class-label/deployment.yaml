@@ -2,17 +2,9 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: assign-class-label-webhook
-  labels:
-    app: assign-class-label
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: assign-class-label
   template:
-    metadata:
-      labels:
-        app: assign-class-label
     spec:
       containers:
         - name: assign-class-label
@@ -30,7 +22,7 @@ spec:
               memory: 512Mi
           env:
             # EDIT VALUE HERE BEFORE RUNNING, must be comma separated
-            - name: GROUPS
+            - name: CLASS_GROUPS
               value: "cs210,cs506,ee440"
       serviceAccountName: webhook-sa
       volumes:

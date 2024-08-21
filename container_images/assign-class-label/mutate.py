@@ -13,30 +13,47 @@ logging.basicConfig(level=logging.INFO)
 
 try:
     config.load_incluster_config()
-except config.ConfigException as e:
-    LOG.error('Could not configure Kubernetes client: %s', str(e))
-    exit(1)
+except config.ConfigException:
+    try:
+        config.load_kube_config()
+    except config.ConfigException:
+        LOG.error('Could not configure Kubernetes client')
+        exit(1)
 
 k8s_client = client.ApiClient()
 dyn_client = DynamicClient(k8s_client)
 
 
-def assign_class_label(pod, groups):
+# Get list of classes (groups)
+groups_env = os.environ.get('CLASS_GROUPS')
+
+if not groups_env:
+    LOG.error('Must set CLASS_GROUPS environment variable in deployment.yaml')
+    exit(1)
+
+groups = groups_env.split(',')
+
+
+def assign_class_label(pod):
     # Extract pod metadata
     pod_metadata = pod.get('metadata', {})
     pod_labels = pod_metadata.get('labels', {})
     pod_user = pod_labels.get('opendatahub.io/user', None)
 
+    if not pod_user:
+        return None
+
+    # Create group api client
+    group_resource = dyn_client.resources.get(
+        api_version='user.openshift.io/v1', kind='Group'
+    )
+
     # Iterate through classes
     for group in groups:
         try:
-            # Get users in group (class)
-            group_resource = dyn_client.resources.get(
-                api_version='user.openshift.io/v1', kind='Group'
-            )
+            # Get users in class (group)
             group_obj = group_resource.get(name=group)
-            group_obj_dict = group_obj.to_dict()
-            group_users = group_obj_dict.get('users', [])
+            group_users = group_obj.users
 
             # Check if group has no users
             if not group_users:
@@ -63,14 +80,8 @@ def mutate_pod():
     uid = request_info['request']['uid']
     pod = request_info['request']['object']
 
-    groups = os.environ.get('GROUPS').split(',')
-
-    if not groups:
-        LOG.error('GROUPS environment variables are required.')
-        exit(1)
-
     # Grab class that the pod user belongs to
-    class_label = assign_class_label(pod, groups)
+    class_label = assign_class_label(pod)
 
     # If user not in any class, return without modifications
     if not class_label:
@@ -87,7 +98,9 @@ def mutate_pod():
         )
 
     # Generate JSON Patch to add class label
-    patch = [{'op': 'add', 'path': '/metadata/labels/class', 'value': class_label}]
+    patch = [
+        {'op': 'add', 'path': "/metadata/labels/ope_class", 'value': class_label}
+    ]
 
     # Encode patch as base64 for response
     patch_base64 = base64.b64encode(json.dumps(patch).encode('utf-8')).decode('utf-8')
@@ -105,8 +118,3 @@ def mutate_pod():
             },
         }
     )
-
-
-if __name__ == '__main__':
-    logging.basicConfig(level='INFO')
-    webhook.run(host='0.0.0.0', port=8443)
