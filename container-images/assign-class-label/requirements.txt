@@ -2,3 +2,4 @@ flask
 kubernetes
 openshift
 gunicorn
+pydantic

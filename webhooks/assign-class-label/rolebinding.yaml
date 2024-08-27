@@ -9,4 +9,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: webhook-sa
-  namespace: rhods-notebooks
+  namespace: ope-test

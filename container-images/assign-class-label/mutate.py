@@ -1,40 +1,66 @@
 import logging
 import json
 import base64
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from kubernetes import config, client
 from openshift.dynamic import DynamicClient
+
+from pydantic import BaseModel, ValidationError, constr
+from typing import Dict, Any, Optional, List
 
 LOG = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-def get_client():
+class PodMetadata(BaseModel):
+    labels: Optional[Dict[str, str]] = None
+
+
+class PodObject(BaseModel):
+    metadata: PodMetadata
+
+
+class AdmissionRequest(BaseModel):
+    uid: constr(min_length=1)
+    object: PodObject
+
+
+class AdmissionReview(BaseModel):
+    request: AdmissionRequest
+
+
+def get_client() -> DynamicClient:
     try:
-        config.load_config()
+        config.load_config() 
+        k8s_client = client.ApiClient()
+        dyn_client = DynamicClient(
+            k8s_client
+        )  
+        return dyn_client
     except config.ConfigException as e:
         LOG.error('Could not configure Kubernetes client: %s', str(e))
         exit(1)
 
-    k8s_client = client.ApiClient()
-    dyn_client = DynamicClient(k8s_client)
-
-    return dyn_client
-
 
 # Get users of a given group
-def get_group_members(group_resource, group_name):
+def get_group_members(group_resource: Any, group_name: str) -> List[str]:
     group_obj = group_resource.get(name=group_name)
     return group_obj.users
 
 
-def assign_class_label(pod, groups, dyn_client):
+def assign_class_label(
+    pod: Dict[str, Any], groups: List[str], dyn_client: DynamicClient
+) -> Optional[str]:
     # Extract pod metadata
-    pod_metadata = pod.get('metadata', {})
-    pod_labels = pod_metadata.get('labels', {})
-    pod_user = pod_labels.get('opendatahub.io/user', None)
+    try:
+        pod_metadata = pod.get('metadata', {})
+        pod_labels = pod_metadata.get('labels', {})
+        pod_user = pod_labels.get('opendatahub.io/user', None)
+    except AttributeError as e:
+        LOG.error(f'Error extracting pod information: {e}')
+        return None
 
-    group_resource = dyn_client.resources.get(  # Need to move this group_resource, this is running every iteration of for loop
+    group_resource = dyn_client.resources.get(
         api_version='user.openshift.io/v1', kind='Group'
     )
 
@@ -55,7 +81,7 @@ def assign_class_label(pod, groups, dyn_client):
     return None
 
 
-def create_app(**config):
+def create_app(**config: Any) -> Flask:
     app = Flask(__name__)
     app.config.from_prefixed_env('RHOAI_CLASS')
     app.config.update(config)
@@ -66,16 +92,33 @@ def create_app(**config):
 
     groups = app.config['GROUPS'].split(',')
 
-    dyn_client = (
-        get_client()
-    )  # Moved here so not being called every for loop in assign_class_label
+    dyn_client = get_client()
 
     @app.route('/mutate', methods=['POST'])
-    def mutate_pod():
-        # Grab pod for mutation
-        request_info = request.get_json()
-        uid = request_info['request']['uid']
-        pod = request_info['request']['object']
+    def mutate_pod() -> Response:
+        # Grab pod for mutation and validate request
+        try:
+            admission_review = AdmissionReview(**request.get_json())
+        except ValidationError as e:
+            LOG.error('Validation error: %s', e)
+            return (
+                jsonify(
+                    {
+                        'apiVersion': 'admission.k8s.io/v1',
+                        'kind': 'AdmissionReview',
+                        'response': {
+                            'uid': request.json.get('request', {}).get('uid', ''),
+                            'allowed': False,
+                            'status': {'message': f'Invalid request: {e}'},
+                        },
+                    }
+                ),
+                400,
+                {'content-type': 'application/json'},
+            )
+
+        uid = admission_review.request.uid
+        pod = admission_review.request.object.model_dump()
 
         # Grab class that the pod user belongs to
         try:
@@ -99,12 +142,19 @@ def create_app(**config):
             )
 
         # Generate JSON Patch to add class label
-        patch = [{'op': 'add', 'path': '/metadata/labels/class', 'value': class_label}]
+        patch = [
+            {
+                'op': 'add',
+                'path': '/metadata/labels/nerc.mghpcc.org~1class',
+                'value': class_label,
+            }
+        ]
 
         # Encode patch as base64 for response
         patch_base64 = base64.b64encode(json.dumps(patch).encode('utf-8')).decode(
             'utf-8'
         )
+
         # Return webhook response that includes the patch to add class label
         return jsonify(
             {
