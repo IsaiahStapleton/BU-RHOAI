@@ -41,6 +41,10 @@ def get_client() -> DynamicClient:
         LOG.error('Could not configure Kubernetes client: %s', str(e))
         exit(1)
 
+def get_group_resource(dyn_client):
+    return dyn_client.resources.get(
+        api_version='user.openshift.io/v1', kind='Group'
+    )
 
 # Get users of a given group
 def get_group_members(group_resource: Any, group_name: str) -> List[str]:
@@ -60,9 +64,7 @@ def assign_class_label(
         LOG.error(f'Error extracting pod information: {e}')
         return None
 
-    group_resource = dyn_client.resources.get(
-        api_version='user.openshift.io/v1', kind='Group'
-    )
+    group_resource = get_group_resource()
 
     # Iterate through classes
     for group in groups:
