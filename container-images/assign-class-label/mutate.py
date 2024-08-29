@@ -29,22 +29,25 @@ class AdmissionReview(BaseModel):
     request: AdmissionRequest
 
 
+def decode_pod_user(pod_user: str) -> str:
+    user = pod_user.replace('-40', '@').replace('-2e', '.')
+    return user
+
+
 def get_client() -> DynamicClient:
     try:
-        config.load_config() 
+        config.load_config()
         k8s_client = client.ApiClient()
-        dyn_client = DynamicClient(
-            k8s_client
-        )  
+        dyn_client = DynamicClient(k8s_client)
         return dyn_client
     except config.ConfigException as e:
         LOG.error('Could not configure Kubernetes client: %s', str(e))
         exit(1)
 
+
 def get_group_resource(dyn_client):
-    return dyn_client.resources.get(
-        api_version='user.openshift.io/v1', kind='Group'
-    )
+    return dyn_client.resources.get(api_version='user.openshift.io/v1', kind='Group')
+
 
 # Get users of a given group
 def get_group_members(group_resource: Any, group_name: str) -> List[str]:
@@ -63,8 +66,11 @@ def assign_class_label(
     except AttributeError as e:
         LOG.error(f'Error extracting pod information: {e}')
         return None
+    
+    if pod_user is not None:
+        pod_user = decode_pod_user(pod_user)
 
-    group_resource = get_group_resource()
+    group_resource = get_group_resource(dyn_client)
 
     # Iterate through classes
     for group in groups:
