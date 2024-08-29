@@ -6,7 +6,14 @@ from unittest import mock
 
 @pytest.fixture()
 def app():
-    with mock.patch('mutate.get_group_members') as mock_group_members:
+    with mock.patch('mutate.get_client') as mock_get_client, \
+         mock.patch('mutate.get_group_resource') as mock_get_group_resource, \
+         mock.patch('mutate.get_group_members') as mock_group_members:
+
+
+        mock_object = mock.Mock()
+        mock_get_client.return_value = mock_object
+        mock_get_group_resource.return_value = mock_object
 
         def mock_get_group_members(group_resource, group_name):
             if group_name == 'class1':
