@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ope-rhods-testing-1fef2f
+commonLabels:
+  app: assign-class-label-webhook
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - webhook-config.yaml
+  - serviceaccount.yaml
+  - role.yaml
+  - rolebinding.yaml

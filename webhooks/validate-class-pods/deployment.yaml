@@ -1,0 +1,31 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: validate-class-pods
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: validate-class-pods
+          image: quay.io/rh-ee-istaplet/ope-webhooks:validate-class-pods
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 443
+          volumeMounts:
+            - name: cert
+              mountPath: /certs
+              readOnly: true
+          resources:
+            limits: 
+              cpu: 500m
+              memory: 512Mi
+          env:
+            # EDIT VALUE HERE BEFORE RUNNING, must be comma separated
+            - name: CLASS_IMAGE
+              value: "image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/ucsls-f24:latest"
+      serviceAccountName: webhook-sa
+      volumes:
+        - name: cert
+          secret:
+            secretName: validate-webhook-cert
