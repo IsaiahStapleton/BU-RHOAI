@@ -71,7 +71,7 @@ def test_request_no_metadata(client):
         },
     )
 
-    assert res.status_code == 200
+    assert res.status_code == 400
     assert res.json == {
         'apiVersion': 'admission.k8s.io/v1',
         'kind': 'AdmissionReview',
@@ -79,6 +79,8 @@ def test_request_no_metadata(client):
             'allowed': True,
             'status': {'message': 'No class label assigned.'},
             'uid': '1234',
+            'patchType': None,
+            'patch': None,
         },
     }
 
@@ -122,6 +124,9 @@ def test_valid_request(client):
             }
         },
     )
+
+    print(f'Response code: {res.status_code}')
+    print(f'Response JSON: {res.get_json()}')
     assert res.status_code == 200
     assert res.get_json()['response']['patchType'] == 'JSONPatch'
 
@@ -167,7 +172,7 @@ def test_no_user(client):
         },
     )
 
-    assert res.status_code == 200
+    assert res.status_code == 400
     assert res.json == {
         'apiVersion': 'admission.k8s.io/v1',
         'kind': 'AdmissionReview',
@@ -175,6 +180,8 @@ def test_no_user(client):
             'allowed': True,
             'status': {'message': 'No class label assigned.'},
             'uid': '1234',
+            'patchType': None,
+            'patch': None,
         },
     }
 
@@ -188,7 +195,7 @@ def test_no_user(client):
         },
     )
 
-    assert res.status_code == 200
+    assert res.status_code == 400
     assert res.json == {
         'apiVersion': 'admission.k8s.io/v1',
         'kind': 'AdmissionReview',
@@ -196,6 +203,8 @@ def test_no_user(client):
             'allowed': True,
             'status': {'message': 'No class label assigned.'},
             'uid': '1234',
+            'patchType': None,
+            'patch': None,
         },
     }
 
@@ -220,7 +229,7 @@ def test_empty_group_members(client):
             },
         )
 
-        assert res.status_code == 200
+        assert res.status_code == 400
         assert res.json == {
             'apiVersion': 'admission.k8s.io/v1',
             'kind': 'AdmissionReview',
@@ -228,5 +237,7 @@ def test_empty_group_members(client):
                 'allowed': True,
                 'status': {'message': 'No class label assigned.'},
                 'uid': '1234',
+                'patchType': None,
+                'patch': None,
             },
         }

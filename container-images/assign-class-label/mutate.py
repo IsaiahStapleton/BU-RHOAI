@@ -29,9 +29,26 @@ class AdmissionReview(BaseModel):
     request: AdmissionRequest
 
 
+class Status(BaseModel):
+    message: Optional[str] = None
+
+
+class AdmissionResponse(BaseModel):
+    uid: str
+    allowed: bool
+    status: Optional[Status] = None
+    patchType: Optional[str] = None
+    patch: Optional[str] = None
+
+
+class AdmissionReviewResponse(BaseModel):
+    apiVersion: str = 'admission.k8s.io/v1'
+    kind: str = 'AdmissionReview'
+    response: AdmissionResponse
+
+
 def decode_pod_user(pod_user: str) -> str:
-    user = pod_user.replace('-40', '@').replace('-2e', '.')
-    return user
+    return pod_user.replace('-40', '@').replace('-2e', '.')
 
 
 def get_client() -> DynamicClient:
@@ -56,8 +73,8 @@ def get_group_members(group_resource: Any, group_name: str) -> List[str]:
 
 
 def assign_class_label(
-    pod: Dict[str, Any], groups: List[str], dyn_client: DynamicClient
-) -> Optional[str]:
+    pod: dict[str, Any], groups: list[str], dyn_client: DynamicClient
+) -> str | None:
     # Extract pod metadata
     try:
         pod_metadata = pod.get('metadata', {})
@@ -66,9 +83,11 @@ def assign_class_label(
     except AttributeError as e:
         LOG.error(f'Error extracting pod information: {e}')
         return None
-    
-    if pod_user is not None:
-        pod_user = decode_pod_user(pod_user)
+
+    if pod_user is None:
+        return None
+
+    pod_user = decode_pod_user(pod_user)
 
     group_resource = get_group_resource(dyn_client)
 
@@ -111,15 +130,13 @@ def create_app(**config: Any) -> Flask:
             LOG.error('Validation error: %s', e)
             return (
                 jsonify(
-                    {
-                        'apiVersion': 'admission.k8s.io/v1',
-                        'kind': 'AdmissionReview',
-                        'response': {
-                            'uid': request.json.get('request', {}).get('uid', ''),
-                            'allowed': False,
-                            'status': {'message': f'Invalid request: {e}'},
-                        },
-                    }
+                    AdmissionReviewResponse(
+                        response=AdmissionResponse(
+                            uid=request.json.get('request', {}).get('uid', ''),
+                            allowed=False,
+                            status=Status(message=f'Invalid request: {e}'),
+                        )
+                    ).model_dump()
                 ),
                 400,
                 {'content-type': 'application/json'},
@@ -137,16 +154,18 @@ def create_app(**config: Any) -> Flask:
 
         # If user not in any class, return without modifications
         if not class_label:
-            return jsonify(
-                {
-                    'apiVersion': 'admission.k8s.io/v1',
-                    'kind': 'AdmissionReview',
-                    'response': {
-                        'uid': uid,
-                        'allowed': True,
-                        'status': {'message': 'No class label assigned.'},
-                    },
-                }
+            return (
+                jsonify(
+                    AdmissionReviewResponse(
+                        response=AdmissionResponse(
+                            uid=uid,
+                            allowed=True,
+                            status=Status(message='No class label assigned.'),
+                        )
+                    ).model_dump()
+                ),
+                400,
+                {'content-type': 'application/json'},
             )
 
         # Generate JSON Patch to add class label
@@ -164,17 +183,16 @@ def create_app(**config: Any) -> Flask:
         )
 
         # Return webhook response that includes the patch to add class label
-        return jsonify(
-            {
-                'apiVersion': 'admission.k8s.io/v1',
-                'kind': 'AdmissionReview',
-                'response': {
-                    'uid': uid,
-                    'allowed': True,
-                    'patchType': 'JSONPatch',
-                    'patch': patch_base64,
-                },
-            }
+        return (
+            jsonify(
+                AdmissionReviewResponse(
+                    response=AdmissionResponse(
+                        uid=uid, allowed=True, patchType='JSONPatch', patch=patch_base64
+                    )
+                ).model_dump()
+            ),
+            200,
+            {'content-type': 'application/json'},
         )
 
     return app
