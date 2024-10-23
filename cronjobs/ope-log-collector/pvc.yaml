@@ -2,10 +2,9 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: ope-logs
-  namespace: rhods-notebooks
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 25Gi
+      storage: 75Gi

@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ope-log-collector
-  namespace: rhods-notebooks
 spec:
   replicas: 1
   template:
@@ -17,13 +16,22 @@ spec:
               mountPath: /log
           env:
             - name: NAMESPACE
-              value: "rhods-notebooks"
-        - name: read-pvc
-          image: registry.access.redhat.com/ubi8/ubi
-          command: ["sleep", "infinity"]
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+        - name: ope-log-reader
+          image: docker.io/alpinelinux/darkhttpd
           volumeMounts:
             - name: ope-logs
               mountPath: /log
+          ports:
+          - name: http
+            containerPort: 8080
+          command:
+          - darkhttpd
+          - /log
+          - --port
+          - "8080"
       volumes:
         - name: ope-logs
           persistentVolumeClaim:

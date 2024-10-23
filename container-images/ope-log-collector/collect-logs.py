@@ -89,10 +89,16 @@ async def gather_logs(namespace: str):
 
     except asyncio.CancelledError:
         LOG.info('User cancelled run. Cancelling log streaming.')
+        for task_group in tasks.values():
+            for task in task_group:
+                task.cancel()
         exit(1)
 
     except Exception as e:
         LOG.info(f'Unexpected Error: {e}.')
+        for task_group in tasks.values():
+            for task in task_group:
+                task.cancel()
 
 
 async def stream_pod_logs(log_info: LogInfo):

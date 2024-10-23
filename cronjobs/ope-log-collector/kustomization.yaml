@@ -1,6 +1,5 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: rhods-notebooks
 commonLabels:
   app: ope-log-collector
 
@@ -9,3 +8,14 @@ resources:
   - role.yaml
   - rolebinding.yaml
   - serviceaccount.yaml
+  - pvc.yaml
+  - service.yaml
+
+transformers:
+- |
+  apiVersion: builtin
+  kind: NamespaceTransformer
+  metadata:
+    name: notImportantHere
+    namespace: rhods-notebooks
+  setRoleBindingSubjects: allServiceAccounts
