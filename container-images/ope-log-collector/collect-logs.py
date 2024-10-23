@@ -74,15 +74,17 @@ async def gather_logs(namespace: str):
 
                 # Start streaming logs
                 if pod_name not in tasks:
-                    tasks[pod_name] = await asyncio.gather(
-                        stream_pod_logs(log_info),
-                        stream_pod_events(log_info),
-                        stream_pvc_events(log_info),
-                    )
+                    tasks[pod_name] = [
+                        asyncio.create_task(stream_pod_logs(log_info)),
+                        asyncio.create_task(stream_pod_events(log_info)),
+                        asyncio.create_task(stream_pvc_events(log_info)),
+                    ]
 
             elif event_type == 'DELETED':
                 if pod_name in tasks:
                     LOG.info(f'Pod deleted: {pod_name}. Cancelling log streaming.')
+                    for task in tasks[pod_name]:
+                        task.cancel()
                     del tasks[pod_name]
 
     except asyncio.CancelledError:
@@ -128,8 +130,6 @@ async def stream_pod_logs(log_info: LogInfo):
         if response:
             await response.release()
 
-    await asyncio.sleep(5)
-
 
 async def stream_pod_events(log_info: LogInfo):
     log_file_path = os.path.join('./log', f'{log_info.pod_name}-pod-events.log')
@@ -171,8 +171,6 @@ async def stream_pod_events(log_info: LogInfo):
         if response:
             await response.release()
 
-    await asyncio.sleep(5)
-
 
 async def stream_pvc_events(log_info: LogInfo):
     log_file_path = os.path.join('./log', f'{log_info.pod_name}-pvc-events.log')
@@ -213,8 +211,6 @@ async def stream_pvc_events(log_info: LogInfo):
     finally:
         if response:
             await response.release()
-
-    await asyncio.sleep(5)
 
 
 if __name__ == '__main__':
